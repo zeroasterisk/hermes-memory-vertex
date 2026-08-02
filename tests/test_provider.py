@@ -180,7 +180,37 @@ def test_on_memory_write_skips_remove(provider):
     fake_client.generate_from_fact.assert_not_called()
 
 
+def test_on_session_switch(provider, caplog):
+    import logging
+    with caplog.at_level(logging.DEBUG):
+        provider.on_session_switch("new_sess", parent_session_id="old_sess", reset=True, rewound=False)
+    assert "session switch: old_sess -> new_sess" in caplog.text
+
+
+def test_on_pre_compress(provider):
+    out = provider.on_pre_compress([])
+    assert "Gemini Enterprise Agent Platform Memory Bank" in out
+
+
+def test_on_delegation(provider):
+    fake_client = mock.Mock()
+    with mock.patch.object(provider, "_get_client", return_value=fake_client):
+        provider.on_delegation("write python script", "wrote code")
+        # Run a brief sleep to ensure background daemon thread has processed the write
+        import time
+        time.sleep(0.1)
+    fake_client.generate_from_fact.assert_called_once_with(
+        provider._scope, "Delegated task completed: 'write python script' -> Result: wrote code", source="delegation"
+    )
+
+
+def test_backup_paths(provider):
+    paths = provider.backup_paths()
+    assert len(paths) == 1
+    assert "vertex_memory.json" in paths[0]
+
+
 def test_system_prompt_block(provider):
     block = provider.system_prompt_block()
-    assert "Vertex AI Memory Bank" in block
+    assert "Gemini Enterprise Agent Platform Memory Bank" in block
     assert "user_id=alan" in block

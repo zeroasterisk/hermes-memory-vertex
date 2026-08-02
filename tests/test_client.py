@@ -47,6 +47,12 @@ def test_parent_and_base(client):
     assert client._base == "https://us-central1-aiplatform.googleapis.com/v1beta1"
 
 
+def test_global_location_parent_and_base():
+    c = VertexMemoryBankClient("proj", "global", "eng123")
+    assert c._parent == "projects/proj/locations/global/reasoningEngines/eng123"
+    assert c._base == "https://global-aiplatform.googleapis.com/v1beta1"
+
+
 def test_memory_id_helper():
     assert _memory_id("projects/p/locations/l/reasoningEngines/e/memories/999") == "999"
     assert _memory_id("") == ""

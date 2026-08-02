@@ -1,7 +1,7 @@
 # hermes-memory-vertex
 
 A [Hermes Agent](https://github.com/NousResearch/hermes-agent) **memory-provider
-plugin** backed by [Google Cloud Vertex AI Memory Bank](https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview).
+plugin** backed by [Gemini Enterprise Agent Platform Memory Bank](https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview).
 Gives your agent persistent, **cross-session and cross-agent** long-term memory —
 managed by Google Cloud, with no vector DB to run.
 
@@ -26,7 +26,7 @@ across every agent/profile using the same scope:
 
 ## How it maps to Hermes
 
-| Hermes `MemoryProvider` hook | Vertex Memory Bank operation |
+| Hermes `MemoryProvider` hook | Gemini Enterprise Agent Platform Memory Bank operation |
 |---|---|
 | `is_available()` | checks config present (no network) |
 | `initialize()` | resolves scope from gateway `user_id`, lazy ADC token |
@@ -43,8 +43,8 @@ across every agent/profile using the same scope:
    gcloud auth application-default login
    # or point GOOGLE_APPLICATION_CREDENTIALS at a service-account key
    ```
-   The principal needs `aiplatform.*` (Vertex AI User is sufficient).
-3. A **Vertex Agent Engine** instance (provides the `reasoning_engine_id`):
+   The principal needs `aiplatform.*` (Vertex AI User or Agent Platform admin/user is sufficient).
+3. A **Gemini Enterprise Agent Platform** instance (provides the `reasoning_engine_id`):
    ```bash
    pip install "google-cloud-aiplatform>=1.111.0"
    python create_engine.py --project YOUR_PROJECT --location us-central1

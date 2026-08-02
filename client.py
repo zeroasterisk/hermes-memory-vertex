@@ -1,4 +1,4 @@
-"""REST client for Vertex AI Memory Bank (Agent Engine).
+"""REST client for Gemini Enterprise Agent Platform Memory Bank (Agent Engine).
 
 Thin, dependency-light wrapper over the v1beta1 `reasoningEngines/*/memories*`
 endpoints. Auth via Application Default Credentials (ADC). Uses `requests` for
@@ -34,7 +34,7 @@ class MemoryBankError(RuntimeError):
 
 
 class VertexMemoryBankClient:
-    """Minimal Vertex AI Memory Bank REST client (ADC-authenticated)."""
+    """Minimal Gemini Enterprise Agent Platform Memory Bank REST client (ADC-authenticated)."""
 
     def __init__(self, project_id: str, location: str, reasoning_engine_id: str):
         if not (project_id and location and reasoning_engine_id):

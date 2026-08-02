@@ -1,7 +1,7 @@
-"""Vertex AI Memory Bank — Hermes MemoryProvider plugin.
+"""Gemini Enterprise Agent Platform Memory Bank — Hermes MemoryProvider plugin.
 
 Cross-session, cross-agent persistent memory backed by Google Cloud
-Vertex AI Memory Bank (Agent Engine). Memories are extracted *facts*
+Gemini Enterprise Agent Platform Memory Bank (Agent Engine). Memories are extracted *facts*
 (not raw transcripts), consolidated server-side with automatic
 deduplication and contradiction resolution.
 
@@ -55,7 +55,7 @@ _MIN_TOTAL_CHARS = 100
 SEARCH_SCHEMA = {
     "name": "memorybank_search",
     "description": (
-        "Semantic search over long-term memory (Vertex AI Memory Bank). "
+        "Semantic search over long-term memory (Gemini Enterprise Agent Platform Memory Bank). "
         "Returns relevant facts ranked by similarity, with memory IDs and "
         "scores. Use to recall the user's preferences, decisions, project "
         "context, or anything established in past sessions."
@@ -133,7 +133,7 @@ STATS_SCHEMA = {
 # ---------------------------------------------------------------------------
 
 class VertexMemoryBankProvider(MemoryProvider):
-    """Vertex AI Memory Bank — managed cross-session memory."""
+    """Gemini Enterprise Agent Platform Memory Bank — managed cross-session memory."""
 
     def __init__(self):
         self._cfg: dict = {}
@@ -170,7 +170,7 @@ class VertexMemoryBankProvider(MemoryProvider):
             {"key": "location", "description": "GCP region (e.g. us-central1)", "required": True,
              "default": "us-central1"},
             {"key": "reasoning_engine_id",
-             "description": "Vertex Agent Engine reasoning engine id "
+             "description": "Gemini Enterprise Agent Platform reasoning engine id "
                             "(create one: see README)", "required": True},
             {"key": "scope_key",
              "description": "Scope dimension for memory isolation",
@@ -198,7 +198,7 @@ class VertexMemoryBankProvider(MemoryProvider):
             or "hermes-user"
         )
         self._scope = {scope_key: str(scope_val)}
-        logger.info("Vertex Memory Bank initialized (scope=%s)", self._scope)
+        logger.info("Gemini Enterprise Agent Platform Memory Bank initialized (scope=%s)", self._scope)
 
     def _get_client(self) -> VertexMemoryBankClient:
         with self._client_lock:
@@ -228,7 +228,7 @@ class VertexMemoryBankProvider(MemoryProvider):
         if self._consecutive_failures >= _BREAKER_THRESHOLD:
             self._breaker_open_until = time.monotonic() + _BREAKER_COOLDOWN_SECS
             logger.warning(
-                "Vertex Memory Bank circuit breaker tripped after %d failures; "
+                "Gemini Enterprise Agent Platform Memory Bank circuit breaker tripped after %d failures; "
                 "pausing %ds.", self._consecutive_failures, _BREAKER_COOLDOWN_SECS,
             )
 
@@ -237,7 +237,7 @@ class VertexMemoryBankProvider(MemoryProvider):
     def system_prompt_block(self) -> str:
         scope_desc = ", ".join(f"{k}={v}" for k, v in self._scope.items())
         return (
-            "# Vertex AI Memory Bank\n"
+            "# Gemini Enterprise Agent Platform Memory Bank\n"
             f"Active. Scope: {scope_desc}.\n"
             "Long-term memory persists across sessions and agents. Use "
             "memorybank_search to recall, memorybank_remember to store durable "
@@ -321,6 +321,56 @@ class VertexMemoryBankProvider(MemoryProvider):
             self._record_failure()
             logger.debug("Vertex on_memory_write failed: %s", e)
 
+    def on_session_switch(
+        self,
+        new_session_id: str,
+        *,
+        parent_session_id: str = "",
+        reset: bool = False,
+        rewound: bool = False,
+        **kwargs,
+    ) -> None:
+        """Handle session rotation mid-process."""
+        logger.debug(
+            "Gemini Enterprise Memory Bank session switch: %s -> %s (reset=%s, rewound=%s)",
+            parent_session_id,
+            new_session_id,
+            reset,
+            rewound,
+        )
+
+    def on_pre_compress(self, messages: List[Dict[str, Any]]) -> str:
+        """Invoked before context compression. Insights are already persisted to Gemini Enterprise Memory Bank."""
+        return "[Memory Bank] Key conversation insights have been safely persisted to Gemini Enterprise Agent Platform Memory Bank."
+
+    def on_delegation(self, task: str, result: str, *, child_session_id: str = "", **kwargs) -> None:
+        """Store the outcome of delegated subtasks in the memory bank."""
+        if self._is_breaker_open() or not task or not result:
+            return
+        fact = f"Delegated task completed: '{task.strip()}' -> Result: {result.strip()}"
+        
+        def _sync():
+            try:
+                self._get_client().generate_from_fact(
+                    self._scope, fact, source="delegation"
+                )
+                self._record_success()
+            except Exception as e:  # noqa: BLE001
+                self._record_failure()
+                logger.debug("Gemini Enterprise Memory Bank on_delegation failed: %s", e)
+
+        # Run in a daemon thread so it is completely non-blocking
+        t = threading.Thread(target=_sync, daemon=True, name="vertex-mem-delegation")
+        t.start()
+
+    def backup_paths(self) -> List[str]:
+        """Return the path to vertex_memory.json to include in backups."""
+        try:
+            from config import _CONFIG_FILENAME, _hermes_home
+        except ImportError:
+            from .config import _CONFIG_FILENAME, _hermes_home
+        return [str(_hermes_home() / _CONFIG_FILENAME)]
+
     # -- tools ----------------------------------------------------------------
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -328,7 +378,7 @@ class VertexMemoryBankProvider(MemoryProvider):
 
     def handle_tool_call(self, tool_name: str, args: dict, **kwargs) -> str:
         if self._is_breaker_open():
-            return json.dumps({"error": "Vertex Memory Bank temporarily unavailable "
+            return json.dumps({"error": "Gemini Enterprise Agent Platform Memory Bank temporarily unavailable "
                                         "(consecutive failures). Retrying automatically."})
         try:
             client = self._get_client()

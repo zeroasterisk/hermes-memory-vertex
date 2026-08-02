@@ -1,4 +1,4 @@
-"""Config loading/saving for the Vertex Memory Bank plugin.
+"""Config loading/saving for the Gemini Enterprise Agent Platform Memory Bank plugin.
 
 Precedence: environment variables provide defaults; $HERMES_HOME/vertex_memory.json
 overrides individual keys. No secrets are stored — auth is via ADC.
