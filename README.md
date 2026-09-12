@@ -58,13 +58,12 @@ across every agent/profile using the same scope:
 git clone https://github.com/zeroasterisk/hermes-memory-vertex \
   ~/.hermes/plugins/memory/vertex-memory
 
-# Configure (writes $HERMES_HOME/vertex_memory.json; ADC = no secret stored)
-hermes memory setup     # pick "vertex-memory" and answer the prompts
-# …or set it directly:
+# Configure via the Hermes admin dashboard (hermes dashboard -> Memory ->
+# Vertex AI Memory Bank), `hermes memory setup`, or directly:
 hermes config set memory.provider vertex-memory
 ```
 
-Minimal `$HERMES_HOME/vertex_memory.json`:
+Minimal `$HERMES_HOME/vertex-memory/config.json` (the dashboard writes here too):
 ```json
 {
   "project_id": "your-gcp-project",
@@ -82,6 +81,9 @@ hermes vertex-memory status
 
 ## Configuration
 
+Configurable via the Hermes admin dashboard (a `config_schema.py` panel), or
+directly in `$HERMES_HOME/vertex-memory/config.json`:
+
 | Key | Required | Default | Description |
 |---|---|---|---|
 | `project_id` | ✅ | — | GCP project id |
@@ -91,6 +93,10 @@ hermes vertex-memory status
 | `scope_value` | | gateway `user_id` ⇒ `hermes-user` | static scope value for CLI |
 | `top_k` | | `10` | max memories per recall |
 | `max_distance` | | none | relevance cutoff (lower = stricter) |
+
+A pre-dashboard `$HERMES_HOME/vertex_memory.json` still works as a read-only
+fallback, but the dashboard always writes to (and `load_config()` prefers)
+`vertex-memory/config.json`.
 
 All settings may also be supplied via env vars: `VERTEX_MEMORY_PROJECT_ID`,
 `VERTEX_MEMORY_LOCATION`, `VERTEX_MEMORY_ENGINE_ID`, `VERTEX_MEMORY_SCOPE_KEY`,
@@ -102,6 +108,11 @@ All settings may also be supplied via env vars: `VERTEX_MEMORY_PROJECT_ID`,
 together — matching is *exact on all keys* and **immutable** per memory. Use
 `scope_key: user_id` (the default) to share memory across all your agents for
 the same user. Choose your scoping before backfilling.
+
+Mutating operations (`memorybank_forget`, `memorybank_correct`) verify the
+target memory's live scope matches the configured scope *before* mutating —
+a same-engine memory belonging to a different scope is refused, not silently
+touched.
 
 ## Agent tools
 
