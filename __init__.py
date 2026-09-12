@@ -361,7 +361,7 @@ class VertexMemoryBankProvider(MemoryProvider):
                 mid = args.get("memory_id", "")
                 if not mid:
                     return tool_error("Missing required parameter: memory_id")
-                client.delete(mid)
+                client.delete(mid, scope=self._scope)
                 self._record_success()
                 return json.dumps({"result": f"Deleted memory {mid}."})
 

@@ -128,16 +128,38 @@ def test_generate_from_fact_fire_and_forget(client):
 
 
 def test_delete(client):
-    with mock.patch("requests.request", return_value=FakeResp(status=200, text="")) as m:
-        client.delete("42")
+    with mock.patch.object(client, "get_memory", return_value={"scope": {"u": "a"}}):
+        with mock.patch("requests.request", return_value=FakeResp(status=200, text="")) as m:
+            client.delete("42", scope={"u": "a"})
     method, url, _ = _last_call(m)
     assert method == "DELETE"
     assert url.endswith("/memories/42")
 
 
+def test_delete_refuses_cross_scope(client):
+    """delete() must raise and perform no mutation when the memory belongs to a
+    different scope than the one the caller expects — this is the fail-closed
+    guard against a same-engine, cross-user/cross-agent forget/correct."""
+    with mock.patch.object(client, "get_memory", return_value={"scope": {"u": "someone-else"}}):
+        with mock.patch("requests.request") as m:
+            with pytest.raises(MemoryBankError, match="does not belong to the configured scope"):
+                client.delete("42", scope={"u": "a"})
+    m.assert_not_called()
+
+
+def test_delete_refuses_when_scope_lookup_fails(client):
+    """A failed ownership lookup must fail closed (raise), never fall through to delete."""
+    with mock.patch.object(client, "get_memory", side_effect=MemoryBankError("500: boom")):
+        with mock.patch("requests.request") as m:
+            with pytest.raises(MemoryBankError, match="Cannot verify memory scope"):
+                client.delete("42", scope={"u": "a"})
+    m.assert_not_called()
+
+
 def test_correct_patch_shape(client):
-    with mock.patch("requests.request", return_value=FakeResp(payload={})) as m:
-        client.correct({"u": "a"}, "7", "new fact")
+    with mock.patch.object(client, "get_memory", return_value={"scope": {"u": "a"}}):
+        with mock.patch("requests.request", return_value=FakeResp(payload={})) as m:
+            client.correct({"u": "a"}, "7", "new fact")
     method, url, kw = _last_call(m)
     assert method == "PATCH"
     assert url.endswith("/memories/7")
@@ -145,11 +167,21 @@ def test_correct_patch_shape(client):
     assert kw["json"] == {"fact": "new fact"}
 
 
+def test_correct_refuses_cross_scope(client):
+    with mock.patch.object(client, "get_memory", return_value={"scope": {"u": "someone-else"}}):
+        with mock.patch("requests.request") as m:
+            with pytest.raises(MemoryBankError, match="does not belong to the configured scope"):
+                client.correct({"u": "a"}, "7", "new fact")
+    m.assert_not_called()
+
+
 def test_correct_404_falls_back_to_generate(client):
     calls = []
 
     def fake_request(method, url, **kw):
         calls.append((method, url))
+        if method == "GET":
+            return FakeResp(payload={"scope": {"u": "a"}})
         if method == "PATCH":
             return FakeResp(status=404, text="not found")
         return FakeResp(payload={"generatedMemories": [{"action": "CREATED"}]})
