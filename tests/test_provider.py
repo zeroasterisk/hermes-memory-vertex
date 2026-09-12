@@ -136,10 +136,21 @@ def test_forget_and_correct(provider):
         out_f = json.loads(provider.handle_tool_call("memorybank_forget", {"memory_id": "9"}))
         out_c = json.loads(provider.handle_tool_call(
             "memorybank_correct", {"memory_id": "9", "fact": "new"}))
-    fake_client.delete.assert_called_once_with("9")
+    fake_client.delete.assert_called_once_with("9", scope={"user_id": "alan"})
     fake_client.correct.assert_called_once()
     assert "Deleted" in out_f["result"]
     assert "Corrected" in out_c["result"]
+
+
+def test_forget_propagates_scope_guard_error(provider, provider_mod):
+    """A cross-scope forget attempt must surface as a tool error, not succeed."""
+    fake_client = mock.Mock()
+    fake_client.delete.side_effect = provider_mod.MemoryBankError(
+        "Refusing to mutate: memory does not belong to the configured scope.")
+    with mock.patch.object(provider, "_get_client", return_value=fake_client):
+        out = json.loads(provider.handle_tool_call("memorybank_forget", {"memory_id": "9"}))
+    assert "error" in out
+    assert "does not belong to the configured scope" in out["error"]
 
 
 def test_stats_tool(provider):

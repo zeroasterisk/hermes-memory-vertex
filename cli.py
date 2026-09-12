@@ -88,8 +88,27 @@ def _cmd_remember(args):
 
 def _cmd_forget(args):
     client, scope, _ = _client_and_scope()
-    client.delete(args.memory_id)
+    try:
+        client.delete(args.memory_id, scope=scope)
+    except MemoryBankError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     print(f"Deleted memory {args.memory_id}.")
+
+
+def _cmd_correct(args):
+    client, scope, _ = _client_and_scope()
+    try:
+        client.correct(scope, args.memory_id, args.fact)
+    except MemoryBankError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Corrected memory {args.memory_id}.")
+
+
+def _cmd_stats(args):
+    client, scope, _ = _client_and_scope()
+    print(f"{client.count(scope)} memories in scope {scope}")
 
 
 def _dispatch(args):
@@ -97,10 +116,11 @@ def _dispatch(args):
     handlers = {
         "status": _cmd_status, "search": _cmd_search, "list": _cmd_list,
         "remember": _cmd_remember, "forget": _cmd_forget,
+        "correct": _cmd_correct, "stats": _cmd_stats,
     }
     fn = handlers.get(sub)
     if not fn:
-        print("Usage: hermes vertex-memory <status|search|list|remember|forget>",
+        print("Usage: hermes vertex-memory <status|search|list|remember|forget|correct|stats>",
               file=sys.stderr)
         sys.exit(2)
     fn(args)
@@ -126,5 +146,11 @@ def register_cli(subparser) -> None:
 
     p_forget = subs.add_parser("forget", help="Delete a memory by id")
     p_forget.add_argument("memory_id")
+
+    p_correct = subs.add_parser("correct", help="Update a memory's fact in place")
+    p_correct.add_argument("memory_id")
+    p_correct.add_argument("fact")
+
+    subs.add_parser("stats", help="Total memory count in scope")
 
     subparser.set_defaults(func=_dispatch)

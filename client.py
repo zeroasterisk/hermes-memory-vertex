@@ -154,7 +154,35 @@ class VertexMemoryBankClient:
         updated = sum(1 for m in generated if m.get("action") == "UPDATED")
         return {"created": created, "updated": updated, "total": len(generated)}
 
-    def delete(self, memory_id: str) -> None:
+    def get_memory(self, memory_id: str) -> Dict[str, Any]:
+        """GET a single memory by (bare or full-name) id."""
+        name = memory_id if "/" in memory_id else f"{self._parent}/memories/{memory_id}"
+        return self._request("GET", name)
+
+    def _assert_owned_by_scope(self, memory_id: str, expected_scope: Dict[str, str]) -> None:
+        """Fail-closed scope guard for mutating operations (forget/correct).
+
+        A single reasoning engine can hold memories for many scopes (different
+        users, different agents), and ADC credentials are typically broad
+        enough to read/write any of them. Without this check, a caller could
+        forget/correct a same-engine memory belonging to a DIFFERENT scope
+        than the one this provider instance is configured for — the API layer
+        alone does not enforce per-caller scope isolation. On any mismatch,
+        missing scope, or lookup failure this raises and performs no mutation;
+        callers must not catch it and continue.
+        """
+        try:
+            memory = self.get_memory(memory_id)
+        except MemoryBankError as e:
+            raise MemoryBankError(
+                f"Cannot verify memory scope before mutating (lookup failed): {e}") from e
+        actual_scope = memory.get("scope")
+        if not actual_scope or actual_scope != expected_scope:
+            raise MemoryBankError(
+                "Refusing to mutate: memory does not belong to the configured scope.")
+
+    def delete(self, memory_id: str, *, scope: Dict[str, str]) -> None:
+        self._assert_owned_by_scope(memory_id, scope)
         self._request("DELETE", f"{self._parent}/memories/{memory_id}")
 
     def correct(self, scope: Dict[str, str], memory_id: str, fact: str, *,
@@ -162,7 +190,11 @@ class VertexMemoryBankClient:
         """PATCH a memory's fact in place with exponential backoff.
 
         If the memory is missing (404), fall back to a consolidation write.
+        Scope ownership is verified BEFORE any mutation (including the 404
+        fallback path, which only regenerates — never patches — a memory that
+        already failed the ownership check).
         """
+        self._assert_owned_by_scope(memory_id, scope)
         last_err: Optional[Exception] = None
         for attempt in range(max_attempts):
             try:
