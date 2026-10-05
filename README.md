@@ -1,158 +1,28 @@
-# hermes-memory-vertex
+# hermes-memory-vertex (deprecated)
 
-A [Hermes Agent](https://github.com/NousResearch/hermes-agent) **memory-provider
-plugin** backed by [Google Cloud Vertex AI Memory Bank](https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview).
-Gives your agent persistent, **cross-session and cross-agent** long-term memory —
-managed by Google Cloud, with no vector DB to run.
+> **This repository is deprecated.** The Hermes native Vertex AI Memory Bank
+> provider now lives in
+> [Shubhamsaboo/google-memorybank-plugin](https://github.com/Shubhamsaboo/google-memorybank-plugin)
+> under [`hermes/vertex-memory/`](https://github.com/Shubhamsaboo/google-memorybank-plugin/tree/main/hermes/vertex-memory),
+> alongside the OpenClaw plugin and Hermes MCP server it shares memories with.
+> No further changes will land here.
 
-> Inspired by [Shubhamsaboo/openclaw-vertexai-memorybank](https://github.com/Shubhamsaboo/openclaw-vertexai-memorybank)
-> (the OpenClaw TypeScript plugin), ported to the Hermes Python `MemoryProvider` ABC.
-> **Not** an officially supported Google product.
-
-## Why
-
-Hermes' built-in `MEMORY.md` / `USER.md` are file-backed and live in one profile.
-This plugin adds **user-scoped memory that compounds over time** and is shared
-across every agent/profile using the same scope:
-
-- **Auto-recall** — before each turn, relevant memories are retrieved by
-  similarity search and injected into context.
-- **Auto-capture** — after each turn, the last user+assistant pair is sent to
-  Memory Bank for server-side **fact extraction**, **deduplication**, and
-  **contradiction resolution** (new facts update old ones in place).
-- **Managed** — no embeddings, no vector store, no local DB. Your data stays in
-  your GCP project.
-- **Token-efficient** — memories are extracted *facts*, not raw transcripts.
-
-## How it maps to Hermes
-
-| Hermes `MemoryProvider` hook | Vertex Memory Bank operation |
-|---|---|
-| `is_available()` | checks config present (no network) |
-| `initialize()` | resolves scope from gateway `user_id`, lazy ADC token |
-| `queue_prefetch()` / `prefetch()` | background `memories:retrieve`, cached |
-| `sync_turn()` | background `memories:generate` (events) — fire-and-forget |
-| `on_memory_write()` | mirrors built-in `MEMORY.md`/`USER.md` writes |
-| `get_tool_schemas()` | `memorybank_search/remember/forget/correct/stats` |
-
-## Prerequisites
-
-1. A GCP project with the **Vertex AI API** enabled and billing on.
-2. **Application Default Credentials** available to Hermes:
-   ```bash
-   gcloud auth application-default login
-   # or point GOOGLE_APPLICATION_CREDENTIALS at a service-account key
-   ```
-   The principal needs `aiplatform.*` (Vertex AI User is sufficient).
-3. A **Vertex Agent Engine** instance (provides the `reasoning_engine_id`):
-   ```bash
-   pip install "google-cloud-aiplatform>=1.111.0"
-   python create_engine.py --project YOUR_PROJECT --location us-central1
-   ```
-   Copy the printed `reasoning_engine_id`.
-
-## Install
+## Migrate
 
 ```bash
-# Clone into your Hermes plugins dir (or a category subfolder)
-git clone https://github.com/zeroasterisk/hermes-memory-vertex \
-  ~/.hermes/plugins/memory/vertex-memory
+# remove the old checkout
+rm -rf ~/.hermes/plugins/memory/vertex-memory ~/.hermes/plugins/vertex-memory
 
-# Configure via the Hermes admin dashboard (hermes dashboard -> Memory ->
-# Vertex AI Memory Bank), `hermes memory setup`, or directly:
+# install the maintained provider
+hermes plugins install Shubhamsaboo/google-memorybank-plugin/hermes/vertex-memory
+hermes plugins enable vertex-memory
 hermes config set memory.provider vertex-memory
 ```
 
-Minimal `$HERMES_HOME/vertex-memory/config.json` (the dashboard writes here too):
-```json
-{
-  "project_id": "your-gcp-project",
-  "location": "us-central1",
-  "reasoning_engine_id": "1234567890",
-  "scope_key": "user_id",
-  "top_k": 10
-}
-```
+Config carries over unchanged: same plugin name (`vertex-memory`), same keys,
+same `$HERMES_HOME/vertex-memory/config.json` (legacy `vertex_memory.json` is
+still read). Memories live in your Memory Bank instance, so nothing to export.
 
-Restart Hermes. Verify:
-```bash
-hermes vertex-memory status
-```
-
-## Configuration
-
-Configurable via the Hermes admin dashboard (a `config_schema.py` panel), or
-directly in `$HERMES_HOME/vertex-memory/config.json`:
-
-| Key | Required | Default | Description |
-|---|---|---|---|
-| `project_id` | ✅ | — | GCP project id |
-| `location` | ✅ | `us-central1` | GCP region |
-| `reasoning_engine_id` | ✅ | — | Agent Engine reasoning engine id |
-| `scope_key` | | `user_id` | scope dimension (`user_id` = cross-agent sharing) |
-| `scope_value` | | gateway `user_id` ⇒ `hermes-user` | static scope value for CLI |
-| `top_k` | | `10` | max memories per recall |
-| `max_distance` | | none | relevance cutoff (lower = stricter) |
-
-A pre-dashboard `$HERMES_HOME/vertex_memory.json` still works as a read-only
-fallback, but the dashboard always writes to (and `load_config()` prefers)
-`vertex-memory/config.json`.
-
-All settings may also be supplied via env vars: `VERTEX_MEMORY_PROJECT_ID`,
-`VERTEX_MEMORY_LOCATION`, `VERTEX_MEMORY_ENGINE_ID`, `VERTEX_MEMORY_SCOPE_KEY`,
-`VERTEX_MEMORY_SCOPE_VALUE`, `VERTEX_MEMORY_TOP_K`, `VERTEX_MEMORY_MAX_DISTANCE`.
-
-### Scoping (important)
-
-`scope` controls **both** who can see a memory **and** what gets consolidated
-together — matching is *exact on all keys* and **immutable** per memory. Use
-`scope_key: user_id` (the default) to share memory across all your agents for
-the same user. Choose your scoping before backfilling.
-
-Mutating operations (`memorybank_forget`, `memorybank_correct`) verify the
-target memory's live scope matches the configured scope *before* mutating —
-a same-engine memory belonging to a different scope is refused, not silently
-touched.
-
-## Agent tools
-
-| Tool | What it does |
-|---|---|
-| `memorybank_search` | semantic search → facts + ids + scores |
-| `memorybank_remember` | store a durable fact (via consolidation) |
-| `memorybank_forget` | delete a memory by id |
-| `memorybank_correct` | update a memory's fact in place (PATCH, falls back to create) |
-| `memorybank_stats` | total memory count + scope |
-
-## CLI
-
-```bash
-hermes vertex-memory status
-hermes vertex-memory search "deployment region" --top-k 5 --show-ids
-hermes vertex-memory list --count-only
-hermes vertex-memory remember "Deploys use us-central1"
-hermes vertex-memory forget 1234567890
-```
-
-## Privacy
-
-Auto-capture sends the **last user+assistant message pair** to your Vertex AI
-Memory Bank instance for extraction. Content stays within your GCP project.
-Set `memory.provider` back to `builtin` to disable.
-
-## Pricing (2026)
-
-Storage ~$0.25 / 1k memories / mo · Retrieval ~$0.50 / 1k returned (first
-1k/mo free) · Generation = Gemini token cost only. See
-[Vertex AI pricing](https://cloud.google.com/vertex-ai/pricing#vertex-ai-agent-engine).
-
-## Development
-
-```bash
-pip install -r requirements-dev.txt
-pytest -q              # runs fully mocked — no GCP calls
-```
-
-## License
-
-[MIT](LICENSE)
+The maintained version adds stricter `memory_id` validation, project-number
+alias handling, and correction recovery (restores the original fact if a
+delete-and-regenerate fails).
